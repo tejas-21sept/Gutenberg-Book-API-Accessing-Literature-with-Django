@@ -1,72 +1,62 @@
-from django.core.paginator import EmptyPage, PageNotAnInteger, Paginator
 from django.db.models import Q
-from rest_framework import status
+from rest_framework import generics
 from rest_framework.response import Response
-from rest_framework.views import APIView
 
 from .models import Book
+from .pagination import BookPagination
 from .serializers import BookSerializer
 
 
-class BookListView(APIView):
-    def get(self, request):
-        language = request.GET.get("language", None)
-        mime_type = request.GET.get("mime_type", None)
-        topic = request.GET.get("topic", None)
-        author = request.GET.get("author", None)
-        title = request.GET.get("title", None)
+class BookListAPIView(generics.ListAPIView):
+    """
+    API endpoint for listing books with filtering and pagination support.
+    """
 
-        print(
-            f"\nlanguage - {language}\nmime_type - {mime_type}\ntopic - {topic}\nauthor - {author}\ntitle - {title}\n"
-        )
+    serializer_class = BookSerializer
+    pagination_class = BookPagination
 
-        # Split multiple values by comma and create list
-        languages = language.split(",") if language else None
-        topics = topic.split(",") if topic else None
-        author = author.split(",") if author else None
-        title = title.split(",") if title else None
-        mime_type = mime_type.split(",") if mime_type else None
+    def get_queryset(self):
+        """
+        Retrieves the queryset of books based on provided filter parameters.
 
-        # Filter based on query parameters
-        books = Book.objects.all()
+        Returns:
+            queryset: A queryset of Book objects filtered based on query parameters.
+        """
+        queryset = Book.objects.all().order_by("id")
+
+        # Filtering based on query parameters
+        book_ids = self.request.GET.getlist("book_id")
+        languages = self.request.GET.getlist("language")
+        mime_types = self.request.GET.getlist("mime_type")
+        topics = self.request.GET.getlist("topic")
+        authors = self.request.GET.getlist("author")
+        titles = self.request.GET.getlist("title")
+
+        # Filtering by book IDs
+        if book_ids:
+            queryset = queryset.filter(gutenberg_id__in=book_ids)
+
+        # Filtering by languages
         if languages:
-            books = books.filter(language__in=languages)
-        if mime_type:
-            books = books.filter(mime_type__iexact=mime_type)
+            queryset = queryset.filter(booklanguages__language__code__in=languages)
+
+        # Filtering by MIME types
+        if mime_types:
+            queryset = queryset.filter(format__mime_type__in=mime_types)
+
+        # Filtering by topics (subjects or bookshelves)
         if topics:
-            # Use Q objects for OR condition in query
-            topic_query = Q()
-            for t in topics:
-                topic_query |= Q(subject__icontains=t) | Q(bookshelf__icontains=t)
-            books = books.filter(topic_query)
-        if author:
-            books = books.filter(author__icontains=author)
-        if title:
-            books = books.filter(title__icontains=title)
+            queryset = queryset.filter(
+                Q(booksubjects__subject__name__icontains=topics)
+                | Q(bookbookshelves__bookshelf__name__icontains=topics)
+            )
 
-        # Ordering by popularity (number of download_count)
-        books = books.order_by("-download_count")
+        # Filtering by authors
+        if authors:
+            queryset = queryset.filter(bookauthors__author__name__icontains=authors)
 
-        # Pagination
-        paginator = Paginator(books, 20)
-        page = request.GET.get("page")
-        try:
-            book_page = paginator.page(page)
-        except PageNotAnInteger:
-            book_page = paginator.page(1)
-        except EmptyPage:
-            book_page = paginator.page(paginator.num_pages)
+        # Filtering by titles
+        if titles:
+            queryset = queryset.filter(title__icontains=titles)
 
-        serializer = BookSerializer(book_page, many=True)
-        data = {"count": paginator.count, "books": serializer.data}
-        return Response(data)
-
-
-class BookDetail(APIView):
-    def get(self, request, book_id):
-        try:
-            book = Book.objects.get(pk=book_id)
-            serializer = BookSerializer(book)
-            return Response(serializer.data)
-        except Book.DoesNotExist:
-            return Response(status=status.HTTP_404_NOT_FOUND)
+        return queryset

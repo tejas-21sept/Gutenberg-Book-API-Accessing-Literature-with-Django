@@ -1,4 +1,9 @@
+import os
 from pathlib import Path
+
+from dotenv import load_dotenv
+
+load_dotenv()
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -8,10 +13,10 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # See https://docs.djangoproject.com/en/5.0/howto/deployment/checklist/
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = "django-insecure-24@(1m6=r++toc1_m*omm=9ua_#)y7izgn7%6j&t5p2+w^ua@z"
+SECRET_KEY = str(os.getenv("SECRET_KEY"))
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
+DEBUG = os.getenv("DEBUG", False)
 
 ALLOWED_HOSTS = []
 
@@ -66,11 +71,11 @@ WSGI_APPLICATION = "gutenbergbook.wsgi.application"
 DATABASES = {
     "default": {
         "ENGINE": "django.db.backends.mysql",
-        "NAME": "gutenberg-book-library",
-        "USER": "root",
-        "PASSWORD": "MySQL",
-        "HOST": "localhost",
-        "PORT": "3306",
+        "NAME": os.getenv("DATABASE_NAME", False),
+        "USER": os.getenv("DATABASE_USER", False),
+        "PASSWORD": os.getenv("DATABASE_PASSWORD", False),
+        "HOST": os.getenv("DATABASE_HOST", False),
+        "PORT": os.getenv("DATABASE_PORT", False),
     }
 }
 
