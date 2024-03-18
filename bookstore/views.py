@@ -1,57 +1,62 @@
 from django.db.models import Q
-from rest_framework import filters, generics
-from rest_framework.pagination import PageNumberPagination
+from rest_framework import generics
+from rest_framework.response import Response
 
 from .models import Book
+from .pagination import BookPagination
 from .serializers import BookSerializer
 
 
-class CustomPagination(PageNumberPagination):
-    page_size = 20
-    page_size_query_param = "page_size"
-    max_page_size = 1000
+class BookListAPIView(generics.ListAPIView):
+    """
+    API endpoint for listing books with filtering and pagination support.
+    """
 
-
-class BookList(generics.ListAPIView):
-    queryset = Book.objects.all().order_by("-downloads")
     serializer_class = BookSerializer
-    filter_backends = [filters.SearchFilter]
-    search_fields = ["title", "author", "language", "subjects", "bookshelves"]
-    pagination_class = CustomPagination
+    pagination_class = BookPagination
 
+    def get_queryset(self):
+        """
+        Retrieves the queryset of books based on provided filter parameters.
 
-# class BookList(generics.ListAPIView):
-#     queryset = Book.objects.all().order_by("-downloads")
-#     serializer_class = BookSerializer
+        Returns:
+            queryset: A queryset of Book objects filtered based on query parameters.
+        """
+        queryset = Book.objects.all().order_by("id")
 
-#     def get_queryset(self):
-#         queryset = super().get_queryset()
-#         # Get query parameters
-#         query_params = self.request.GET
+        # Filtering based on query parameters
+        book_ids = self.request.GET.getlist("book_id")
+        languages = self.request.GET.getlist("language")
+        mime_types = self.request.GET.getlist("mime_type")
+        topics = self.request.GET.getlist("topic")
+        authors = self.request.GET.getlist("author")
+        titles = self.request.GET.getlist("title")
 
-#         if gutenberg_ids := query_params.getlist("gutenberg_id"):
-#             queryset = queryset.filter(gutenberg_id__in=gutenberg_ids)
+        # Filtering by book IDs
+        if book_ids:
+            queryset = queryset.filter(gutenberg_id__in=book_ids)
 
-#         if languages := query_params.getlist("language"):
-#             queryset = queryset.filter(language__in=languages)
+        # Filtering by languages
+        if languages:
+            queryset = queryset.filter(booklanguages__language__code__in=languages)
 
-#         if topics := query_params.getlist("topic"):
-#             topic_filter = Q()
-#             for topic in topics:
-#                 topic_filter |= Q(subjects__icontains=topic) | Q(
-#                     bookshelves__icontains=topic
-#                 )
-#             queryset = queryset.filter(topic_filter)
+        # Filtering by MIME types
+        if mime_types:
+            queryset = queryset.filter(format__mime_type__in=mime_types)
 
-#         if authors := query_params.getlist("author"):
-#             queryset = queryset.filter(author__icontains=authors)
+        # Filtering by topics (subjects or bookshelves)
+        if topics:
+            queryset = queryset.filter(
+                Q(booksubjects__subject__name__icontains=topics)
+                | Q(bookbookshelves__bookshelf__name__icontains=topics)
+            )
 
-#         if titles := query_params.getlist("title"):
-#             queryset = queryset.filter(title__icontains=titles)
+        # Filtering by authors
+        if authors:
+            queryset = queryset.filter(bookauthors__author__name__icontains=authors)
 
-#         return queryset
+        # Filtering by titles
+        if titles:
+            queryset = queryset.filter(title__icontains=titles)
 
-
-# In case the number of books that meet the criteria exceeds 20, the API should
-# return only 20 books at a time and support the means of retrieving the next sets
-# of 20 books till all books are retrieved.  - PAGINATION
+        return queryset
